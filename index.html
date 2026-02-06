@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ca">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analitzador d'Imatges amb IA</title>
+    <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --bg: #f4f7f6;
+            --text: #333;
+            --card-bg: #ffffff;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            color: var(--text);
+        }
+
+        .container {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        h1 {
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+            color: var(--secondary);
+        }
+
+        /* Input File Estilitzat */
+        .upload-area {
+            border: 2px dashed #cbd5e0;
+            border-radius: 12px;
+            padding: 2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .upload-area:hover {
+            border-color: var(--primary);
+            background-color: #f8fafc;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .upload-label {
+            font-weight: 600;
+            color: #718096;
+            pointer-events: none;
+        }
+
+        /* Previsualització */
+        #image-preview {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            margin-top: 1.5rem;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Resultats */
+        #label-container {
+            margin-top: 1.5rem;
+            text-align: left;
+        }
+
+        .result-bar-container {
+            margin-bottom: 10px;
+        }
+
+        .result-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            margin-bottom: 4px;
+        }
+
+        .progress-bg {
+            background: #e2e8f0;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.5s ease-out;
+        }
+
+        /* Loading State */
+        .loader-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            display: none;
+            /* Ocult per defecte */
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e2e8f0;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-top: 1rem;
+            transition: background 0.2s;
+            display: none;
+            /* Ocult fins que hi ha imatge */
+        }
+
+        .btn:hover {
+            background: var(--secondary);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div id="loader" class="loader-overlay">
+            <div class="spinner"></div>
+            <p style="margin-top: 10px; font-weight: 500;">Carregant model...</p>
+        </div>
+
+        <h1>Classificador d'Imatges</h1>
+
+        <div class="upload-area" onclick="document.getElementById('file-input').click()">
+            <input type="file" id="file-input" accept="image/*" onchange="handleImageUpload(this)">
+            <div class="upload-label">📁 Clica per pujar una imatge</div>
+        </div>
+
+        <img id="image-preview" src="" alt="Vista prèvia">
+
+        <div id="label-container"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+    <script type="text/javascript">
+        const URL = "./";
+        let model, maxPredictions;
+        const loader = document.getElementById('loader');
+        const loaderText = loader.querySelector('p');
+        const preview = document.getElementById('image-preview');
+        const labelContainer = document.getElementById('label-container');
+
+        // 1. Inicialització automàtica al carregar la pàgina
+        (async function init() {
+            showLoader("Carregant xarxa neuronal...");
+            try {
+                const modelURL = URL + "model.json";
+                const metadataURL = URL + "metadata.json";
+
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
+
+                hideLoader();
+                console.log("Model carregat correctament.");
+            } catch (error) {
+                hideLoader();
+                alert("Error carregant el model. Assegura't que model.json és a la carpeta.");
+                console.error(error);
+            }
+        })();
+
+        // 2. Gestió de la imatge pujada
+        function handleImageUpload(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+
+                reader.onload = function (e) {
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+
+                    // Netegem resultats anteriors
+                    labelContainer.innerHTML = '';
+
+                    // Llancem la predicció quan la imatge ha carregat al DOM
+                    preview.onload = () => predict();
+                };
+
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        // 3. Predicció (sense loop, només una vegada per imatge)
+        async function predict() {
+            if (!model) return;
+
+            showLoader("Analitzant imatge...");
+
+            // Un petit delay per permetre que el DOM renderitzi el loader abans que JS bloquegi el fil amb càlculs
+            setTimeout(async () => {
+                const prediction = await model.predict(preview);
+
+                // Ordenem prediccions per probabilitat (de més a menys)
+                prediction.sort((a, b) => b.probability - a.probability);
+
+                labelContainer.innerHTML = "";
+
+                for (let i = 0; i < maxPredictions; i++) {
+                    const probabilityPercent = (prediction[i].probability * 100).toFixed(1);
+                    const className = prediction[i].className;
+
+                    // Creem elements HTML per les barres de progrés
+                    const div = document.createElement("div");
+                    div.className = "result-bar-container";
+                    div.innerHTML = `
+                        <div class="result-label">
+                            <span>${className}</span>
+                            <span>${probabilityPercent}%</span>
+                        </div>
+                        <div class="progress-bg">
+                            <div class="progress-fill" style="width: ${probabilityPercent}%"></div>
+                        </div>
+                    `;
+                    labelContainer.appendChild(div);
+                }
+                hideLoader();
+            }, 100);
+        }
+
+        // Helpers UI
+        function showLoader(text) {
+            loaderText.innerText = text;
+            loader.style.display = 'flex';
+        }
+
+        function hideLoader() {
+            loader.style.display = 'none';
+        }
+    </script>
+</body>
+
+</html>
