@@ -1,0 +1,2 @@
+# TeachableMachine_DogDistinctModel_ImprovedByGemini
+TeachableMachine DogDistinctModel de Golden Retrievers and Labradores mejorado por Gemini 3
